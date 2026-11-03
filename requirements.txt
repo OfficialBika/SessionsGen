@@ -1,0 +1,3 @@
+python-dotenv>=1.0.1
+pyrogram>=2.0.106
+telethon>=1.36.0
