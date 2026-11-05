@@ -152,18 +152,13 @@ async def start_login(user_id: int, engine: str) -> None:
             api_hash=API_HASH,
             in_memory=True,
         )
-        await client.connect()
     else:
         from telethon import TelegramClient
         from telethon.sessions import StringSession
         client = TelegramClient(StringSession(), API_ID, API_HASH)
 
     try:
-        if engine == "pyrogram":
-            # Pyrogram client was constructed and connected above.
-            pass
-        else:
-            await client.connect()
+        await client.connect()
     except Exception:
         try:
             await client.disconnect()
