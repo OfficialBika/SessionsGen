@@ -341,7 +341,7 @@ async def main() -> None:
     dp.message.register(receive_password, GenerateFlow.password)
     log.info("SessionsGen bot starting (owner-only mode).")
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types(), drop_pending_updates=True)
     finally:
         for user_id, data in list(ACTIVE.items()):
             await disconnect_client(data)
