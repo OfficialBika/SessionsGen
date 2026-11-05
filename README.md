@@ -1,44 +1,59 @@
-# SessionsGen
+# SessionsGen — Telegram String Session Bot
 
-A **local-only** Telegram session utility for accounts you own.
+An owner-only Telegram bot for generating **Pyrogram** and **Telethon** user StringSessions for accounts you own.
 
-## Engines
+## Features
 
-- **Pyrogram** — create a Pyrogram StringSession locally.
-- **Telethon** — create a Telethon StringSession locally.
+- Telegram inline buttons for Pyrogram and Telethon.
+- Phone, login-code and optional 2FA steps inside the private bot chat.
+- Generated session is sent by the logged-in user client to that account's **Saved Messages** in monospace format.
+- Bot chat receives only a completion notice; it does not send the session string there.
+- Owner-ID allowlist; other Telegram users cannot start a generation flow.
+- No database and no session files. Temporary login state is held in process memory only.
+- Login input messages and bot prompts are deleted on a best-effort basis after processing.
+- `/cancel` clears the active flow and disconnects the temporary client.
 
-The Telegram login code and 2FA password are entered only in your local terminal through the client library's interactive prompts. They are never sent to a Telegram bot, administrator, web service, or GitHub.
+## Security
 
-## Requirements
+A StringSession is a full account credential. Anyone who obtains it may access the Telegram account. This bot is deliberately restricted to one configured `OWNER_ID`; do not make it public or add untrusted users.
 
-- Python 3.10+
-- Telegram API ID and API hash from https://my.telegram.org
+The phone number, login code and optional 2FA password are sent through Telegram to your own bot and handled in RAM by your VPS. Input-message deletion is best-effort and is not a guarantee that Telegram or a device has no retained copy. Use only accounts you own, keep the VPS private, protect the bot token and API hash, and never enable request/body logging. The application does not write these values to a database or application log.
 
-## Setup
+## Setup (Ubuntu 24.04 / Python 3.10+)
 
 ```bash
-python -m venv .venv
+git clone https://github.com/OfficialBika/SessionsGen.git
+cd SessionsGen
+python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+nano .env
 ```
 
-Edit `.env` with your own API credentials.
+Set these values in `.env`:
 
-## Run
+- `API_ID`, `API_HASH`: from https://my.telegram.org
+- `BOT_TOKEN`: from @BotFather
+- `OWNER_ID`: your numeric Telegram user ID
+
+Start the bot:
 
 ```bash
-python -m local_session
+python bot.py
 ```
 
-Choose Pyrogram or Telethon. Complete login in the local terminal. The tool sends the generated session to the **currently logged-in account's Saved Messages** as a monospace message, then clears the in-memory reference. It does not write a session file or store sessions in a database or log.
+Open your bot in Telegram using the configured owner account and send `/start` or `/generate`.
 
-## Important security notes
+## Commands
 
-A StringSession is equivalent to an account credential. Anyone who obtains it may gain access to the Telegram account. Treat it like a password. Do not paste it into chats, issues, logs, screenshots, or source control. Use this utility only for accounts you own or are explicitly authorized to administer.
+- `/start` — open the menu
+- `/generate` — choose Pyrogram or Telethon
+- `/cancel` — cancel and clear the current temporary flow
 
-The project deliberately does not provide a bot endpoint that collects users' phone numbers, OTPs, 2FA passwords, or exports their session strings. A Telegram bot cannot securely prove account ownership merely because a user is allowed by an owner-ID check.
+## Notes
 
-## Cleanup
-
-The session is held only in process memory until it is sent. The application does not persist it. For extra protection, run this on a trusted device and keep disk encryption enabled.
+- The bot uses in-memory FSM storage; restarting the process clears the flow.
+- The session is sent only to the authenticated Telegram account's Saved Messages.
+- The session is not shown in the bot chat.
+- Deleting chat messages is best-effort. Do not treat deletion as secure credential erasure.
