@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=bika
-WorkingDirectory=/home/bika/SessionsGen
-EnvironmentFile=/home/bika/SessionsGen/.env
-ExecStart=/home/bika/SessionsGen/.venv/bin/python /home/bika/SessionsGen/bot.py
+WorkingDirectory=/home/bika/projects/SessionsGen
+EnvironmentFile=/home/bika/projects/SessionsGen/.env
+ExecStart=/home/bika/projects/SessionsGen/.venv/bin/python /home/bika/projects/SessionsGen/bot.py
 Restart=on-failure
 RestartSec=5
 UMask=0077
