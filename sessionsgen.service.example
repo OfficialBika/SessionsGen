@@ -1,0 +1,19 @@
+[Unit]
+Description=SessionsGen Telegram String Session Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bika
+WorkingDirectory=/home/bika/SessionsGen
+EnvironmentFile=/home/bika/SessionsGen/.env
+ExecStart=/home/bika/SessionsGen/.venv/bin/python /home/bika/SessionsGen/bot.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
