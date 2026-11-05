@@ -12,7 +12,7 @@ from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.state import StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from dotenv import load_dotenv
@@ -44,6 +44,7 @@ class GenerateFlow(StatesGroup):
 
 # Clients and prompt IDs live only in RAM. There is no database or session file.
 ACTIVE: dict[int, dict[str, Any]] = {}
+EXPIRY_TASKS: dict[int, asyncio.Task] = {}
 
 def owner_only(user_id: int | None) -> bool:
     return user_id == OWNER_ID
@@ -86,6 +87,9 @@ async def disconnect_client(data: dict[str, Any]) -> None:
     data["phone_code_hash"] = None
 
 async def clear_flow(user_id: int, state: FSMContext, bot: Bot) -> None:
+    expiry = EXPIRY_TASKS.pop(user_id, None)
+    if expiry is not None and expiry is not asyncio.current_task():
+        expiry.cancel()
     data = ACTIVE.pop(user_id, {})
     await disconnect_client(data)
     await delete_prompts(bot, user_id, data)
@@ -94,6 +98,22 @@ async def clear_flow(user_id: int, state: FSMContext, bot: Bot) -> None:
 async def ask(bot: Bot, user_id: int, text: str, data: dict[str, Any]) -> None:
     prompt = await bot.send_message(user_id, text)
     data.setdefault("prompt_ids", []).append(prompt.message_id)
+
+async def reset_expiry(user_id: int, state: FSMContext, bot: Bot) -> None:
+    previous = EXPIRY_TASKS.pop(user_id, None)
+    if previous is not None:
+        previous.cancel()
+
+    async def expire() -> None:
+        try:
+            await asyncio.sleep(600)
+            if user_id in ACTIVE:
+                await clear_flow(user_id, state, bot)
+                await bot.send_message(user_id, "⌛ Generation timed out. Temporary login state was cleared. Use /generate to start again.")
+        except asyncio.CancelledError:
+            return
+
+    EXPIRY_TASKS[user_id] = asyncio.create_task(expire())
 
 async def finish_session(
     bot: Bot,
@@ -137,7 +157,19 @@ async def start_login(user_id: int, engine: str) -> None:
         from telethon import TelegramClient
         from telethon.sessions import StringSession
         client = TelegramClient(StringSession(), API_ID, API_HASH)
-        await client.connect()
+
+    try:
+        if engine == "pyrogram":
+            # Pyrogram client was constructed and connected above.
+            pass
+        else:
+            await client.connect()
+    except Exception:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        raise
 
     ACTIVE[user_id] = {
         "engine": engine,
@@ -192,6 +224,7 @@ async def choose_engine(callback: CallbackQuery, state: FSMContext, bot: Bot) ->
             f"📱 <b>{engine.title()} session</b>\nSend your phone number with country code (example: <code>+1234567890</code>).",
             ACTIVE[user.id],
         )
+        await reset_expiry(user.id, state, bot)
     except Exception as exc:
         log.warning("Could not start %s login (%s)", engine, type(exc).__name__)
         await clear_flow(user.id, state, bot)
@@ -225,6 +258,7 @@ async def receive_phone(message: Message, state: FSMContext, bot: Bot) -> None:
             "This message will be deleted after processing.",
             data,
         )
+        await reset_expiry(user_id, state, bot)
     except Exception as exc:
         log.warning("Phone/code request failed (%s)", type(exc).__name__)
         await clear_flow(user_id, state, bot)
@@ -266,6 +300,7 @@ async def receive_code(message: Message, state: FSMContext, bot: Bot) -> None:
                 "It will be deleted after processing and is not written to a database or log.",
                 data,
             )
+            await reset_expiry(user_id, state, bot)
             return
         log.warning("Login code step failed (%s)", type(exc).__name__)
         await clear_flow(user_id, state, bot)
@@ -305,10 +340,7 @@ async def main() -> None:
     dp.message.register(cmd_start, CommandStart())
     dp.message.register(cmd_generate, Command("generate"))
     dp.callback_query.register(choose_engine, F.data.startswith("engine:"))
-    dp.callback_query.register(
-        lambda callback, state, bot: cmd_cancel_callback(callback, state, bot),
-        F.data == "cancel",
-    )
+    dp.callback_query.register(cmd_cancel_callback, F.data == "cancel")
     dp.message.register(receive_phone, GenerateFlow.phone)
     dp.message.register(receive_code, GenerateFlow.code)
     dp.message.register(receive_password, GenerateFlow.password)
